@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 int cb_init(circular_buffer *cb, size_t capacity, size_t sz)
 {

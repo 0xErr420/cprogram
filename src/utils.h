@@ -1,3 +1,4 @@
+#include <stddef.h>
 
 /// Structure for cpu fields
 typedef struct proc_stat
@@ -15,7 +16,7 @@ typedef struct proc_stat
     unsigned long long guest_nice;
 } proc_stat;
 
-/// Structure to store clircular buffer
+/// Structure to store circular buffer
 typedef struct circular_buffer
 {
     void *buffer;     // data buffer
@@ -28,6 +29,9 @@ typedef struct circular_buffer
 } circular_buffer;
 
 /// Initialize circular buffer (inside: dynamically allocates memory)
+///
+/// CAPACITY is size of buffer, SZ is size of individual elements
+///
 /// returns 0 if successful, -1 if failed
 int cb_init(circular_buffer *cb, size_t capacity, size_t sz);
 
@@ -35,9 +39,15 @@ int cb_init(circular_buffer *cb, size_t capacity, size_t sz);
 void cb_free(circular_buffer *cb);
 
 /// Add element to queue
+///
+/// ITEM is element to add
+///
 /// returns 0 if successful, -1 if failed
 int cb_push_back(circular_buffer *cb, const void *item);
 
 /// Get element from queue
+///
+/// ITEM used to return value
+///
 /// returns 0 if successful, -1 if failed
 int cb_pop_front(circular_buffer *cb, void *item);

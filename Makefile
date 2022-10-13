@@ -14,18 +14,20 @@ else ifeq ($(CC),clang)
 endif
 
 main: CUT
-	@echo "Building..."
+	@echo "Buid successful"
 
-CUT: CUT.o reader.o
+CUT: CUT.o reader.o utils.o
 	@echo "Making executable..."
-	$(CC) $(CFLAGS) -o CUT CUT.o reader.o
+	$(CC) $(CFLAGS) -o CUT CUT.o reader.o utils.o
 
 CUT.o: src/CUT.c
-	@echo "Making objects..."
 	$(CC) $(CFLAGS) -c src/CUT.c
 
 reader.o: src/reader.c src/reader.h
 	$(CC) $(CFLAGS) -c src/reader.c
+
+utils.o: src/utils.c src/utils.h
+	$(CC) $(CFLAGS) -c src/utils.c
 
 run:
 	@echo "Executing..."

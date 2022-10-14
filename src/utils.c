@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-int cb_init(circular_buffer *cb, size_t capacity, size_t sz)
+int cb_init(CircularBuffer_type *cb, size_t capacity, size_t sz)
 {
     cb->buffer = malloc(capacity * sz);
     if (cb->buffer == NULL)
@@ -20,13 +20,13 @@ int cb_init(circular_buffer *cb, size_t capacity, size_t sz)
     return 0;
 }
 
-void cb_free(circular_buffer *cb)
+void cb_free(CircularBuffer_type *cb)
 {
     free(cb->buffer);
     // clear out other fields too, just to be safe
 }
 
-int cb_push_back(circular_buffer *cb, const void *item)
+int cb_push_back(CircularBuffer_type *cb, const void *item)
 {
     if (cb->count == cb->capacity)
     {
@@ -41,7 +41,7 @@ int cb_push_back(circular_buffer *cb, const void *item)
     return 0;
 }
 
-int cb_pop_front(circular_buffer *cb, void *item)
+int cb_pop_front(CircularBuffer_type *cb, void *item)
 {
     if (cb->count == 0)
     {

@@ -1,5 +1,5 @@
-#include "reader.h"
 #include "utils.h"
+#include "reader.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,31 +21,22 @@ enum Thread
 /// Array of threads identifiers should be 5 elements long
 /// [Reader, Analyzer, Printer, Watchdog, Logger]
 #define THREAD_NUM 5
+
 /// Size of buffer for Reader-Analyzer
 #define RA_BUFF_SIZE 10
-typedef struct consume_produce
+
+/// ==== Communication between threads ====
+ConsumeProduce_type reader_analyzer;  // Reader-Analyzer
+ConsumeProduce_type analyzer_printer; // Analyzer-Printer
+
+/// ==== Aruments for threads ====
+ArgsThread_type args_reader;   // Reader args
+ArgsThread_type args_analyzer; // Analyzer args
+ArgsThread_type args_printer;  // Printer args
+
+void *thread_Producer(void *arg)
 {
-    pthread_mutex_t mutex_buffer;
-    sem_t sem_empty;
-    sem_t sem_filled;
-    circular_buffer buffer;
-} consume_produce;
-
-typedef struct thread_args
-{
-    consume_produce *arg1; // Consumer
-    consume_produce *arg2; // Producer
-} thread_args;
-
-consume_produce reader_analyzer;  // Reader-Analyzer
-consume_produce analyzer_printer; // Analyzer-Printer
-
-thread_args args_reader;   // Reader
-thread_args args_analyzer; // Analyzer
-thread_args args_printer;  // Printer
-
-void *thread_Producer(thread_args *args)
-{
+    ArgsThread_type *args = (ArgsThread_type *)(arg);
     while (1)
     {
         // Produce
@@ -77,7 +68,7 @@ void *thread_Producer(thread_args *args)
 }
 
 /// Calculate CPU usage (in percentages) for each CPU core from /proc/stat.
-void *thread_Analyzer(thread_args *args)
+void *thread_Analyzer(void *arg)
 {
     /// Consumer for RA_buffer:
     /// 1. Wait for filled element in buffer (increments "filled" semaphore)
@@ -85,6 +76,8 @@ void *thread_Analyzer(thread_args *args)
     /// 3. Do some calculation
     /// 4. Unlock mutex
     /// 5. Decrement "empty" semaphore
+
+    ArgsThread_type *args = (ArgsThread_type *)(arg);
 
     while (1)
     {
@@ -116,6 +109,7 @@ int main()
     sem_init(&reader_analyzer.sem_filled, 0, 0);
     cb_init(&reader_analyzer.buffer, RA_BUFF_SIZE, CPU_READ_SIZE);
 
+    // `args_reader->arg1` stays None because this thread doesn't have consumer
     args_reader.arg2 = &reader_analyzer;
     args_analyzer.arg1 = &reader_analyzer;
 

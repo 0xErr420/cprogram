@@ -34,54 +34,19 @@ ArgsThread_type args_reader;   // Reader args
 ArgsThread_type args_analyzer; // Analyzer args
 ArgsThread_type args_printer;  // Printer args
 
-void *thread_Producer(void *arg)
-{
-    ArgsThread_type *args = (ArgsThread_type *)(arg);
-    while (1)
-    {
-        // Produce
-        FILE *proc = open_proc_stat();
-        while (1)
-        {
-            char str[CPU_READ_SIZE];
-            // Read the line and compare if it starts with "cpu"
-            if ((fgets(str, 224, proc) == NULL) | (strncmp(str, "cpu", (size_t)3) != 0))
-            {
-                // Does not start with "cpu" -> break loop (previous line was last "cpu" line)
-                // printf("fgets() == NULL or strncmp() != 0");
-                break;
-            }
-            // Starts with "cpu" -> continue
-
-            sem_wait(&args->arg2->sem_empty); // Wait for empty
-            pthread_mutex_lock(&args->arg2->mutex_buffer);
-
-            if (cb_push_back(&args->arg2->buffer, str) != 0)
-                perror("Failed to add element to circular buffer");
-            printf("Produced: %s", str);
-
-            pthread_mutex_unlock(&args->arg2->mutex_buffer);
-            sem_post(&args->arg2->sem_filled); // Tell other thread there is filled available
-        }
-        sleep(1);
-    }
-}
-
-/// Calculate CPU usage (in percentages) for each CPU core from /proc/stat.
+/// Analyzer thread calculates CPU usage (in percentages) for each CPU core from /proc/stat.
 void *thread_Analyzer(void *arg)
 {
-    /// Consumer for RA_buffer:
-    /// 1. Wait for filled element in buffer (increments "filled" semaphore)
-    /// 2. Lock mutex
-    /// 3. Do some calculation
-    /// 4. Unlock mutex
-    /// 5. Decrement "empty" semaphore
+    /// 1. Read 'cpu' lines from buffer
+    /// 2. Analyze ana calculate percentages
+    /// 3. Send data to Printer
+    /// 4. repeat
 
+    /// TODO: remove any printf(), check for return values, handle errors
     ArgsThread_type *args = (ArgsThread_type *)(arg);
-
     while (1)
     {
-        // Consume
+        /// Consume:
         sem_wait(&args->arg1->sem_filled); // Wait for filled
         pthread_mutex_lock(&args->arg1->mutex_buffer);
 
@@ -92,7 +57,11 @@ void *thread_Analyzer(void *arg)
 
         pthread_mutex_unlock(&args->arg1->mutex_buffer);
         sem_post(&args->arg1->sem_empty); // Tell other thread there is empty available
+
+        /// TODO: remove sleep
         sleep(2);
+
+        /// TODO: Produce:
     }
 }
 
@@ -108,8 +77,7 @@ int main()
     sem_init(&reader_analyzer.sem_empty, 0, RA_BUFF_SIZE);
     sem_init(&reader_analyzer.sem_filled, 0, 0);
     cb_init(&reader_analyzer.buffer, RA_BUFF_SIZE, CPU_READ_SIZE);
-
-    // `args_reader->arg1` stays None because this thread doesn't have consumer
+    /// `args_reader->arg1` stays None because this thread doesn't have consumer
     args_reader.arg2 = &reader_analyzer;
     args_analyzer.arg1 = &reader_analyzer;
 
@@ -119,13 +87,10 @@ int main()
 
     /// Start threads
     /// -------------------------------
-    // if (pthread_create(&thread[Reader], NULL, &thread_Reader, NULL) != 0)
-    // {
-    //     perror("Failed to create Reader thread");
-    // }
-
-    /// REMOVE: Remove this thread in the future (it is just a test for producer role)
-    pthread_create(&thread[Reader], NULL, &thread_Producer, &args_reader);
+    if (pthread_create(&thread[Reader], NULL, &thread_Reader, &args_reader) != 0)
+    {
+        perror("Failed to create Reader thread");
+    }
 
     if (pthread_create(&thread[Analyzer], NULL, &thread_Analyzer, &args_analyzer) != 0)
     {
@@ -133,21 +98,20 @@ int main()
     }
     /// -------------------------------
 
-    /// Manage signaling
+    /// TODO: Manage signaling
     /// -------------------------------
-    /// here
+    //
     /// -------------------------------
 
     /// Close threads
     /// -------------------------------
-    /// REMOVE: Remove this in the future
-    if (pthread_join(thread[1], NULL) != 0)
-    {
-        perror("Failed to join thread 1");
-    }
     if (pthread_join(thread[Reader], NULL) != 0)
     {
-        perror("Failed to join thread");
+        perror("Failed to join Reader thread");
+    }
+    if (pthread_join(thread[Analyzer], NULL) != 0)
+    {
+        perror("Failed to join Analyzer thread");
     }
     /// -------------------------------
 

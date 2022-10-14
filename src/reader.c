@@ -1,62 +1,55 @@
 #include "reader.h"
+#include "utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 
-void *thread_Reader()
+void *thread_Reader(void *arg)
 {
-    /// Every time i want to read new stats, I NEED TO REOPEN /proc/stat file!
-    /// Maybe I should implement opening file and reading from file as ONE function? (and write unit test for it)
-
-    /// TODO: loop:
-    /// 1. Read cpu stats
-    /// 2. Send data to Analyzer
+    /// 1. Read 'cpu' lines
+    /// 2. Send each line to Analyzer
     /// 3. repeat
 
-    /// TODO: BUFFER "cpu" objects extracted from /proc/stat
-    /// TODO: Implement Producer-Consumer (DO NOT USE spinlocks)
-
-    printf("Reader thread started\n");
-
-    /// TODO: CHANGE IT TO WHILE LOOP
-    for (int i = 0; i < 10; i++)
+    /// TODO: remove any printf(), check for return values, handle errors
+    ArgsThread_type *args = (ArgsThread_type *)(arg);
+    while (1)
     {
-        printf("Iteration No-%d\n", i);
-
-        // Open file
-        FILE *pFile = open_proc_stat();
-
-        // Read every line from file which starts with "cpu"
+        /// Produce:
+        FILE *proc = open_proc_stat();
         while (1)
         {
-            char str[224];
+            char str[CPU_READ_SIZE];
             // Read the line and compare if it starts with "cpu"
-            if ((fgets(str, 224, pFile) == NULL) | (strncmp(str, "cpu", (size_t)3) != 0))
+            if ((fgets(str, CPU_READ_SIZE, proc) == NULL) | (strncmp(str, "cpu", (size_t)3) != 0))
             {
-                // Does not start with "cpu" -> break loop (because it is last "cpu" line)
+                // Does not start with "cpu" -> break loop (previous line was last "cpu" line)
                 // printf("fgets() == NULL or strncmp() != 0");
                 break;
             }
             // Starts with "cpu" -> continue
-            printf("%s", str);
 
-            /// TODO: Send string to Analyzer
+            sem_wait(&args->arg2->sem_empty); // Wait for empty
+            pthread_mutex_lock(&args->arg2->mutex_buffer);
+
+            if (cb_push_back(&args->arg2->buffer, str) != 0)
+                perror("Failed to add element to circular buffer");
+            printf("Produced: %s", str);
+
+            pthread_mutex_unlock(&args->arg2->mutex_buffer);
+            sem_post(&args->arg2->sem_filled); // Tell other thread there is filled available
         }
-        printf("\n");
 
-        // Close file and sleep for some time
-        fclose(pFile);
+        /// TODO: remove sleep
         sleep(1);
     }
-
-    printf("Reader thread closes\n");
     return NULL;
 }
 
 void *open_proc_stat()
 {
+    /// TODO: refactor, remove printf(), handle errors and return value
     printf("Opening /proc/stat file...\n");
 
     FILE *file = fopen("/proc/stat", "r");

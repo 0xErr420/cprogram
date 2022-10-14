@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <string.h>
 
 // Using enum for better code readability in the future
 enum Thread
@@ -25,19 +26,38 @@ sem_t sem_RA_Empty;
 sem_t sem_RA_Filled;
 pthread_mutex_t mutex_RA_buffer;
 circular_buffer RA_buffer;
-// int *RA_buffer[RA_BUFF_SIZE]; // Array of char pointers
-// int RA_count = 0;             // Pointing to the next after last element
 
 void *thread_Producer()
 {
     while (1)
     {
         // Produce
-        sem_wait(&sem_RA_Empty); // Wait for empty
-        pthread_mutex_lock(&mutex_RA_buffer);
+        FILE *proc = open_proc_stat();
+        while (1)
+        {
+            char str[224];
+            // Read the line and compare if it starts with "cpu"
+            if ((fgets(str, 224, proc) == NULL) | (strncmp(str, "cpu", (size_t)3) != 0))
+            {
+                // Does not start with "cpu" -> break loop (previous line was last "cpu" line)
+                // printf("fgets() == NULL or strncmp() != 0");
+                break;
+            }
+            // Starts with "cpu" -> continue
 
-        pthread_mutex_unlock(&mutex_RA_buffer);
-        sem_post(&sem_RA_Filled); // Tell other thread there is filled available
+            /// STOPPED:HERE: I need to use double pointers
+
+            sem_wait(&sem_RA_Empty); // Wait for empty
+            pthread_mutex_lock(&mutex_RA_buffer);
+
+            if (cb_push_back(&RA_buffer, str) != 0)
+                perror("Failed to add element to circular buffer");
+            printf("Produced: %s", str);
+
+            pthread_mutex_unlock(&mutex_RA_buffer);
+            sem_post(&sem_RA_Filled); // Tell other thread there is filled available
+        }
+        sleep(1);
     }
 }
 
@@ -57,8 +77,14 @@ void *thread_Analyzer()
         sem_wait(&sem_RA_Filled); // Wait for filled
         pthread_mutex_lock(&mutex_RA_buffer);
 
+        char str[524];
+        if (cb_pop_front(&RA_buffer, str) != 0)
+            perror("Failed to get element from circular buffer");
+        printf("Consumed: %s\n", str);
+
         pthread_mutex_unlock(&mutex_RA_buffer);
         sem_post(&sem_RA_Empty); // Tell other thread there is empty available
+        sleep(2);
     }
 }
 
@@ -68,20 +94,22 @@ int main()
     // Array of thread identifiers
     pthread_t thread[THREAD_NUM];
 
+    /// Initialization for Read-Analyzer
     /// -------------------------------
-    // Initialization for Read-Analyzer
     pthread_mutex_init(&mutex_RA_buffer, NULL);
     sem_init(&sem_RA_Empty, 0, RA_BUFF_SIZE);
     sem_init(&sem_RA_Filled, 0, 0);
-    cb_init(&RA_buffer, RA_BUFF_SIZE, sizeof(char));
+    cb_init(&RA_buffer, RA_BUFF_SIZE, sizeof(char *));
+    /// -------------------------------
 
-    // Start threads
+    /// Start threads
+    /// -------------------------------
     // if (pthread_create(&thread[Reader], NULL, &thread_Reader, NULL) != 0)
     // {
     //     perror("Failed to create Reader thread");
     // }
 
-    // Remove this thread in the future (it is just a test for producer role)
+    /// REMOVE: Remove this thread in the future (it is just a test for producer role)
     pthread_create(&thread[1], NULL, &thread_Producer, NULL);
 
     if (pthread_create(&thread[Analyzer], NULL, &thread_Analyzer, NULL) != 0)
@@ -90,15 +118,31 @@ int main()
     }
     /// -------------------------------
 
-    // Close threads
+    /// Manage signaling
+    /// -------------------------------
+    /// here
+    /// -------------------------------
+
+    /// Close threads
+    /// -------------------------------
+    /// REMOVE: Remove this in the future
+    if (pthread_join(thread[1], NULL) != 0)
+    {
+        perror("Failed to join thread 1");
+    }
     if (pthread_join(thread[Reader], NULL) != 0)
     {
         perror("Failed to join thread");
     }
+    /// -------------------------------
+
+    /// Destroy
+    /// -------------------------------
     cb_free(&RA_buffer);
     sem_destroy(&sem_RA_Empty);
     sem_destroy(&sem_RA_Filled);
     pthread_mutex_destroy(&mutex_RA_buffer);
+    /// -------------------------------
 
     // printf("Print stat_cpu:\n%s\n", stat_cpu);
 

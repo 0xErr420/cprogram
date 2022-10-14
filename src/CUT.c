@@ -35,7 +35,7 @@ void *thread_Producer()
         FILE *proc = open_proc_stat();
         while (1)
         {
-            char str[224];
+            char str[CPU_READ_SIZE];
             // Read the line and compare if it starts with "cpu"
             if ((fgets(str, 224, proc) == NULL) | (strncmp(str, "cpu", (size_t)3) != 0))
             {
@@ -44,8 +44,6 @@ void *thread_Producer()
                 break;
             }
             // Starts with "cpu" -> continue
-
-            /// STOPPED:HERE: I need to use double pointers
 
             sem_wait(&sem_RA_Empty); // Wait for empty
             pthread_mutex_lock(&mutex_RA_buffer);
@@ -77,7 +75,7 @@ void *thread_Analyzer()
         sem_wait(&sem_RA_Filled); // Wait for filled
         pthread_mutex_lock(&mutex_RA_buffer);
 
-        char str[524];
+        char str[CPU_READ_SIZE];
         if (cb_pop_front(&RA_buffer, str) != 0)
             perror("Failed to get element from circular buffer");
         printf("Consumed: %s\n", str);
@@ -99,7 +97,7 @@ int main()
     pthread_mutex_init(&mutex_RA_buffer, NULL);
     sem_init(&sem_RA_Empty, 0, RA_BUFF_SIZE);
     sem_init(&sem_RA_Filled, 0, 0);
-    cb_init(&RA_buffer, RA_BUFF_SIZE, sizeof(char *));
+    cb_init(&RA_buffer, RA_BUFF_SIZE, CPU_READ_SIZE);
     /// -------------------------------
 
     /// Start threads

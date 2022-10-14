@@ -4,6 +4,7 @@
 typedef struct proc_stat
 {
     // char cpu[6]; // cpu, cpu0, cpu1 etc...
+
     unsigned long long user;
     unsigned long long nice;
     unsigned long long system;
@@ -28,7 +29,8 @@ typedef struct circular_buffer
     void *tail;       // pointer to tail
 } circular_buffer;
 
-/// Initialize circular buffer (inside: dynamically allocates memory)
+/// Initialize circular buffer.
+/// Dynamically allocates memory, it is necessary to call the function `cb_free(...)`.
 ///
 /// CAPACITY is size of buffer, SZ is size of individual elements
 ///

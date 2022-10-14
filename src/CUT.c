@@ -19,15 +19,32 @@ enum Thread
 };
 
 /// Array of threads identifiers should be 5 elements long
-#define THREAD_NUM 5 // Reader, Analyzer, Printer, Watchdog, Logger
-
+/// [Reader, Analyzer, Printer, Watchdog, Logger]
+#define THREAD_NUM 5
+/// Size of buffer for Reader-Analyzer
 #define RA_BUFF_SIZE 10
-sem_t sem_RA_Empty;
-sem_t sem_RA_Filled;
-pthread_mutex_t mutex_RA_buffer;
-circular_buffer RA_buffer;
+typedef struct consume_produce
+{
+    pthread_mutex_t mutex_buffer;
+    sem_t sem_empty;
+    sem_t sem_filled;
+    circular_buffer buffer;
+} consume_produce;
 
-void *thread_Producer()
+typedef struct thread_args
+{
+    consume_produce *arg1; // Consumer
+    consume_produce *arg2; // Producer
+} thread_args;
+
+consume_produce reader_analyzer;  // Reader-Analyzer
+consume_produce analyzer_printer; // Analyzer-Printer
+
+thread_args args_reader;   // Reader
+thread_args args_analyzer; // Analyzer
+thread_args args_printer;  // Printer
+
+void *thread_Producer(thread_args *args)
 {
     while (1)
     {
@@ -45,22 +62,22 @@ void *thread_Producer()
             }
             // Starts with "cpu" -> continue
 
-            sem_wait(&sem_RA_Empty); // Wait for empty
-            pthread_mutex_lock(&mutex_RA_buffer);
+            sem_wait(&args->arg2->sem_empty); // Wait for empty
+            pthread_mutex_lock(&args->arg2->mutex_buffer);
 
-            if (cb_push_back(&RA_buffer, str) != 0)
+            if (cb_push_back(&args->arg2->buffer, str) != 0)
                 perror("Failed to add element to circular buffer");
             printf("Produced: %s", str);
 
-            pthread_mutex_unlock(&mutex_RA_buffer);
-            sem_post(&sem_RA_Filled); // Tell other thread there is filled available
+            pthread_mutex_unlock(&args->arg2->mutex_buffer);
+            sem_post(&args->arg2->sem_filled); // Tell other thread there is filled available
         }
         sleep(1);
     }
 }
 
 /// Calculate CPU usage (in percentages) for each CPU core from /proc/stat.
-void *thread_Analyzer()
+void *thread_Analyzer(thread_args *args)
 {
     /// Consumer for RA_buffer:
     /// 1. Wait for filled element in buffer (increments "filled" semaphore)
@@ -72,32 +89,38 @@ void *thread_Analyzer()
     while (1)
     {
         // Consume
-        sem_wait(&sem_RA_Filled); // Wait for filled
-        pthread_mutex_lock(&mutex_RA_buffer);
+        sem_wait(&args->arg1->sem_filled); // Wait for filled
+        pthread_mutex_lock(&args->arg1->mutex_buffer);
 
         char str[CPU_READ_SIZE];
-        if (cb_pop_front(&RA_buffer, str) != 0)
+        if (cb_pop_front(&args->arg1->buffer, str) != 0)
             perror("Failed to get element from circular buffer");
         printf("Consumed: %s\n", str);
 
-        pthread_mutex_unlock(&mutex_RA_buffer);
-        sem_post(&sem_RA_Empty); // Tell other thread there is empty available
+        pthread_mutex_unlock(&args->arg1->mutex_buffer);
+        sem_post(&args->arg1->sem_empty); // Tell other thread there is empty available
         sleep(2);
     }
 }
 
 int main()
 {
-    srand(time(NULL));
     // Array of thread identifiers
     pthread_t thread[THREAD_NUM];
 
-    /// Initialization for Read-Analyzer
+    /// Initialization
     /// -------------------------------
-    pthread_mutex_init(&mutex_RA_buffer, NULL);
-    sem_init(&sem_RA_Empty, 0, RA_BUFF_SIZE);
-    sem_init(&sem_RA_Filled, 0, 0);
-    cb_init(&RA_buffer, RA_BUFF_SIZE, CPU_READ_SIZE);
+    /// for Read-Analyzer
+    pthread_mutex_init(&reader_analyzer.mutex_buffer, NULL);
+    sem_init(&reader_analyzer.sem_empty, 0, RA_BUFF_SIZE);
+    sem_init(&reader_analyzer.sem_filled, 0, 0);
+    cb_init(&reader_analyzer.buffer, RA_BUFF_SIZE, CPU_READ_SIZE);
+
+    args_reader.arg2 = &reader_analyzer;
+    args_analyzer.arg1 = &reader_analyzer;
+
+    /// for Analyzer-Printer
+    //
     /// -------------------------------
 
     /// Start threads
@@ -108,9 +131,9 @@ int main()
     // }
 
     /// REMOVE: Remove this thread in the future (it is just a test for producer role)
-    pthread_create(&thread[1], NULL, &thread_Producer, NULL);
+    pthread_create(&thread[Reader], NULL, &thread_Producer, &args_reader);
 
-    if (pthread_create(&thread[Analyzer], NULL, &thread_Analyzer, NULL) != 0)
+    if (pthread_create(&thread[Analyzer], NULL, &thread_Analyzer, &args_analyzer) != 0)
     {
         perror("Failed to create Analyzer thread");
     }
@@ -136,10 +159,10 @@ int main()
 
     /// Destroy
     /// -------------------------------
-    cb_free(&RA_buffer);
-    sem_destroy(&sem_RA_Empty);
-    sem_destroy(&sem_RA_Filled);
-    pthread_mutex_destroy(&mutex_RA_buffer);
+    cb_free(&reader_analyzer.buffer);
+    sem_destroy(&reader_analyzer.sem_empty);
+    sem_destroy(&reader_analyzer.sem_filled);
+    pthread_mutex_destroy(&reader_analyzer.mutex_buffer);
     /// -------------------------------
 
     // printf("Print stat_cpu:\n%s\n", stat_cpu);

@@ -1,9 +1,9 @@
-# By default use gcc, if CC option was not provided (use `make CC=<compiler>`)
+# By default use gcc, if CC arg was not provided (use `make CC=<compiler>`)
 CC = gcc
 
-# By default using `std` flag to compile with c99 standart, 
-# if CFLAGS option was not provided (use `make CFLAGS=-std=<version>`)
-CFLAGS = -std=c99
+# CFLAGS arg can be used (use `make CFLAGS=<flag>`)
+# gcc by default uses gnu17 dialect
+# clang by default is ?
 
 ifeq ($(CC),gcc)
 # Using `Wall` and `Wextra` flags to get all warnings
@@ -28,9 +28,13 @@ testrun:
 	@echo "Executing test..."
 	@./test
 
+valg: 
+	@echo "Starting valgrind inspection..."
+	valgrind -v --leak-check=full --show-leak-kinds=all ./CUT
+
 clean:
 	@echo "Cleaning..."
-	@rm -f *.o CUT
+	@rm -f *.o CUT test
 # =========================
 
 # === build executables ===

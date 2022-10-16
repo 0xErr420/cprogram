@@ -1,11 +1,13 @@
 #include "utils.h"
 #include "reader.h"
 
+#include <features.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <signal.h>
 #include <string.h>
 
 // Using enum for better code readability in the future
@@ -34,6 +36,15 @@ ArgsThread_type args_reader;   // Reader args
 ArgsThread_type args_analyzer; // Analyzer args
 ArgsThread_type args_printer;  // Printer args
 
+/// ==== Signaling ====
+static volatile sig_atomic_t sig_quit = 0;
+
+void handle_sigterm(int signum)
+{
+    sig_quit = 1;
+    printf("   <<< Signal!\n");
+}
+
 /// Analyzer thread calculates CPU usage (in percentages) for each CPU core from /proc/stat.
 void *thread_Analyzer(void *arg)
 {
@@ -59,10 +70,14 @@ void *thread_Analyzer(void *arg)
         sem_post(&args->arg1->sem_empty); // Tell other thread there is empty available
 
         /// TODO: remove sleep
-        sleep(2);
+        sleep(1);
 
         /// TODO: Produce:
+
+        // Test if there was a signal to exit
+        pthread_testcancel();
     }
+    return NULL;
 }
 
 int main()
@@ -70,7 +85,13 @@ int main()
     // Array of thread identifiers
     pthread_t thread[THREAD_NUM];
 
-    /// Initialization
+    /// ==== Signaling ====
+    struct sigaction sact;
+    memset(&sact, 0, sizeof(struct sigaction));
+    sact.sa_handler = handle_sigterm;
+    sigaction(SIGINT, &sact, NULL);
+
+    /// ==== Initialization ====
     /// -------------------------------
     /// for Read-Analyzer
     pthread_mutex_init(&reader_analyzer.mutex_buffer, NULL);
@@ -85,7 +106,7 @@ int main()
     //
     /// -------------------------------
 
-    /// Start threads
+    /// ==== Start threads ====
     /// -------------------------------
     if (pthread_create(&thread[Reader], NULL, &thread_Reader, &args_reader) != 0)
     {
@@ -98,21 +119,48 @@ int main()
     }
     /// -------------------------------
 
-    /// TODO: Manage signaling
-    /// -------------------------------
-    //
+    /// TODO: refactor, remove printf()
+    printf("Waiting for signal...\n");
+    /// ==== Manage signaling ====
+    while (!sig_quit)
+    {
+        int t = sleep(3);
+        if (t > 0)
+        {
+            printf("Interrupted with %d sec to go, finishing...\n", t);
+        }
+    }
     /// -------------------------------
 
     /// Close threads
     /// -------------------------------
-    if (pthread_join(thread[Reader], NULL) != 0)
+    printf("Closing threads...\n");
+
+    if (pthread_cancel(thread[Reader]) != 0)
     {
-        perror("Failed to join Reader thread");
+        perror("Failed to cancel Reader thread");
     }
-    if (pthread_join(thread[Analyzer], NULL) != 0)
+    if (pthread_cancel(thread[Analyzer]) != 0)
     {
-        perror("Failed to join Analyzer thread");
+        perror("Failed to cancel Analyzer thread");
     }
+
+    /// TODO: change to THREAD_NUM
+    for (int i = 1; i <= 2; i++)
+    {
+        if (pthread_join(thread[i], NULL) != 0)
+        {
+            perror("Failed to join thread");
+        }
+    }
+    // if (pthread_join(thread[Reader], NULL) != 0)
+    // {
+    //     perror("Failed to join Reader thread");
+    // }
+    // if (pthread_join(thread[Analyzer], NULL) != 0)
+    // {
+    //     perror("Failed to join Analyzer thread");
+    // }
     /// -------------------------------
 
     /// Destroy
@@ -123,6 +171,7 @@ int main()
     pthread_mutex_destroy(&reader_analyzer.mutex_buffer);
     /// -------------------------------
 
+    printf("Exiting\n");
     // printf("Print stat_cpu:\n%s\n", stat_cpu);
 
     // // Extract values with formated string
@@ -138,5 +187,5 @@ int main()
     // printf("%-6s %-16llu %-16llu %-16llu %-16llu %-16llu %-16llu %-16llu %-16llu %-16llu %-16llu\n",
     //        "cpu", user, nice, system, idle, iowait, irq, softirq, steal, guest, guestnice);
 
-    return EXIT_SUCCESS;
+    return 0;
 }

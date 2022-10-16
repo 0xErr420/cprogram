@@ -6,6 +6,14 @@
 #include <unistd.h>
 #include <string.h>
 
+/// Open /proc/stat file
+///
+/// returns FILE pointer if successful, NULL if failed
+static void *open_proc_stat(void);
+
+// /// Read /proc/stat file
+// void *read_proc_stat(FILE *file);
+
 void *thread_Reader(void *arg)
 {
     /// 1. Read 'cpu' lines
@@ -40,14 +48,17 @@ void *thread_Reader(void *arg)
             pthread_mutex_unlock(&args->arg2->mutex_buffer);
             sem_post(&args->arg2->sem_filled); // Tell other thread there is filled available
         }
-
+        fclose(proc);
         /// TODO: remove sleep
         sleep(1);
+
+        // Test if there was a signal to exit
+        pthread_testcancel();
     }
     return NULL;
 }
 
-void *open_proc_stat()
+static void *open_proc_stat(void)
 {
     /// TODO: refactor, remove printf(), handle errors and return value
     printf("Opening /proc/stat file...\n");
@@ -56,21 +67,21 @@ void *open_proc_stat()
     if (!file)
     {
         perror("Could not open stat file");
-        exit(EXIT_FAILURE);
+        return NULL;
     }
 
     printf("Opened /proc/stat file\n");
     return file;
 }
 
-void *read_proc_stat(FILE *file)
-{
-    /// TODO: file read loop
-    /// 1. Open file
-    /// 2. Read from file loop:
-    ///     2.1 Read line
-    ///     2.2 If line starts with "cpu" -> continue, else -> break loop (go to point 4)
-    ///     2.3 Send line to buffer for another thread
-    /// 4. Close file
-    /// 5. repeat
-}
+// void *read_proc_stat(FILE *file)
+// {
+//     /// TODO: file read loop
+//     /// 1. Open file
+//     /// 2. Read from file loop:
+//     ///     2.1 Read line
+//     ///     2.2 If line starts with "cpu" -> continue, else -> break loop (go to point 4)
+//     ///     2.3 Send line to buffer for another thread
+//     /// 4. Close file
+//     /// 5. repeat
+// }

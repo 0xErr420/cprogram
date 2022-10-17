@@ -38,25 +38,23 @@ clean:
 # =========================
 
 # === build executables ===
-CUT: CUT.o reader.o utils.o
+CUT: CUT.o reader.o analyzer.o utils.o
 	@echo "Making executable..."
-	$(CC) $(CFLAGS) -o CUT CUT.o reader.o utils.o
+	$(CC) $(CFLAGS) -o $@ $^
 
 testbuild: test.o utils.o
 	@echo "Making executable..."
-	$(CC) $(CFLAGS) -o test test.o utils.o
+	$(CC) $(CFLAGS) -o test $^
 # =========================
 
 # === build *.o files ===
-CUT.o: src/CUT.c
-	$(CC) $(CFLAGS) -c src/CUT.c
+%.o: src/%.c
+	$(CC) $(CFLAGS) -c $<
 
+CUT.o: src/CUT.c
 test.o: src/test.c
-	$(CC) $(CFLAGS) -c src/test.c
 
 reader.o: src/reader.c src/reader.h
-	$(CC) $(CFLAGS) -c src/reader.c
-
+analyzer.o: src/analyzer.c src/analyzer.h
 utils.o: src/utils.c src/utils.h
-	$(CC) $(CFLAGS) -c src/utils.c
 # =========================

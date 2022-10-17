@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "reader.h"
+#include "analyzer.h"
 
 #include <features.h>
 #include <stdio.h>
@@ -26,57 +27,30 @@ enum Thread
 
 /// Size of buffer for Reader-Analyzer
 #define RA_BUFF_SIZE 10
+/// Size of buffer for Analyzer-Printer
+#define AP_BUFF_SIZE 0
 
 /// ==== Communication between threads ====
-ConsumeProduce_type reader_analyzer;  // Reader-Analyzer
-ConsumeProduce_type analyzer_printer; // Analyzer-Printer
+static ConsumeProduce_type reader_analyzer;  // Reader-Analyzer
+static ConsumeProduce_type analyzer_printer; // Analyzer-Printer
 
 /// ==== Aruments for threads ====
-ArgsThread_type args_reader;   // Reader args
-ArgsThread_type args_analyzer; // Analyzer args
-ArgsThread_type args_printer;  // Printer args
+static ArgsThread_type args_reader;   // Reader args
+static ArgsThread_type args_analyzer; // Analyzer args
+static ArgsThread_type args_printer;  // Printer args
 
 /// ==== Signaling ====
 static volatile sig_atomic_t sig_quit = 0;
 
-void handle_sigterm(int signum)
+static void handle_sigterm(int signum)
 {
     sig_quit = 1;
     printf("   <<< Signal!\n");
 }
 
-/// Analyzer thread calculates CPU usage (in percentages) for each CPU core from /proc/stat.
-void *thread_Analyzer(void *arg)
+/// Printer thread
+void *thread_Printer(void *args)
 {
-    /// 1. Read 'cpu' lines from buffer
-    /// 2. Analyze ana calculate percentages
-    /// 3. Send data to Printer
-    /// 4. repeat
-
-    /// TODO: remove any printf(), check for return values, handle errors
-    ArgsThread_type *args = (ArgsThread_type *)(arg);
-    while (1)
-    {
-        /// Consume:
-        sem_wait(&args->arg1->sem_filled); // Wait for filled
-        pthread_mutex_lock(&args->arg1->mutex_buffer);
-
-        char str[CPU_READ_SIZE];
-        if (cb_pop_front(&args->arg1->buffer, str) != 0)
-            perror("Failed to get element from circular buffer");
-        printf("Consumed: %s\n", str);
-
-        pthread_mutex_unlock(&args->arg1->mutex_buffer);
-        sem_post(&args->arg1->sem_empty); // Tell other thread there is empty available
-
-        /// TODO: remove sleep
-        sleep(1);
-
-        /// TODO: Produce:
-
-        // Test if there was a signal to exit
-        pthread_testcancel();
-    }
     return NULL;
 }
 
@@ -103,7 +77,10 @@ int main()
     args_analyzer.arg1 = &reader_analyzer;
 
     /// for Analyzer-Printer
-    //
+    // pthread_mutex_init(&analyzer_printer.mutex_buffer, NULL);
+    // sem_init(&analyzer_printer.sem_empty, 0, AP_BUFF_SIZE);
+    // sem_init(&analyzer_printer.sem_filled, 0, 0);
+    // cb_init(&analyzer_printer.buffer, AP_BUFF_SIZE, ); /// Stopped here!
     /// -------------------------------
 
     /// ==== Start threads ====
@@ -112,10 +89,13 @@ int main()
     {
         perror("Failed to create Reader thread");
     }
-
     if (pthread_create(&thread[Analyzer], NULL, &thread_Analyzer, &args_analyzer) != 0)
     {
         perror("Failed to create Analyzer thread");
+    }
+    if (pthread_create(&thread[Printer], NULL, &thread_Printer, &args_printer) != 0)
+    {
+        perror("Failed to create Printer thread");
     }
     /// -------------------------------
 
@@ -124,7 +104,7 @@ int main()
     /// ==== Manage signaling ====
     while (!sig_quit)
     {
-        int t = sleep(3);
+        unsigned int t = sleep(3);
         if (t > 0)
         {
             printf("Interrupted with %d sec to go, finishing...\n", t);
@@ -146,7 +126,7 @@ int main()
     }
 
     /// TODO: change to THREAD_NUM
-    for (int i = 1; i <= 2; i++)
+    for (int i = 1; i <= 3; i++)
     {
         if (pthread_join(thread[i], NULL) != 0)
         {

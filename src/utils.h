@@ -8,7 +8,7 @@
 /// Structure for cpu fields
 typedef struct proc_stat
 {
-    // char cpu[6]; // cpu, cpu0, cpu1 etc...
+    char cpu[6]; // name of 'cpu' (For example: cpu, cpu0, cpu1, etc.)
 
     unsigned long long user;
     unsigned long long nice;

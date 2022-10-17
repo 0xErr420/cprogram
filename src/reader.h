@@ -1,8 +1,6 @@
 #ifndef READER_H
 #define READER_H
 
-#include <stdio.h>
-
 /// String size of 'cpu' line
 ///
 /// Should be enough, assuming that in the file /proc/stat the line 'cpu' has a maximum of 10 fields

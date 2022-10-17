@@ -30,10 +30,15 @@ void *thread_Reader(void *arg)
         {
             char str[CPU_READ_SIZE];
             // Read the line and compare if it starts with "cpu"
-            if ((fgets(str, CPU_READ_SIZE, proc) == NULL) | (strncmp(str, "cpu", (size_t)3) != 0))
+            if (fgets(str, CPU_READ_SIZE, proc) == NULL)
+            {
+                // fgets(): If the End-of-File is encountered and no characters have been read, a null pointer is returned
+                perror("Failed to read /proc/stat file");
+                break;
+            }
+            if (strncmp(str, "cpu", (size_t)3) != 0)
             {
                 // Does not start with "cpu" -> break loop (previous line was last "cpu" line)
-                // printf("fgets() == NULL or strncmp() != 0");
                 break;
             }
             // Starts with "cpu" -> continue

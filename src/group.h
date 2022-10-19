@@ -23,6 +23,10 @@ int group_init(group *grp, size_t capacity, size_t sz);
 /// Free dynamically allocated memory for group
 void group_free(group *grp);
 
+/// Show info about group fields
+/// (for debug purposes)
+void group_info(group *grp);
+
 /// Push element to group
 ///
 /// ITEM is element to add

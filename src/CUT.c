@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "group.h"
 #include "reader.h"
 #include "analyzer.h"
 
@@ -28,13 +29,13 @@ enum Thread
 /// Size of buffer for Reader-Analyzer
 #define RA_BUFF_SIZE 10
 /// Size of buffer for Analyzer-Printer
-#define AP_BUFF_SIZE 0
+#define AP_BUFF_SIZE 10
 
 /// ==== Communication between threads ====
 static ConsumeProduce_type reader_analyzer;  // Reader-Analyzer
 static ConsumeProduce_type analyzer_printer; // Analyzer-Printer
 
-/// ==== Aruments for threads ====
+/// ==== Arguments for threads ====
 static ArgsThread_type args_reader;   // Reader args
 static ArgsThread_type args_analyzer; // Analyzer args
 static ArgsThread_type args_printer;  // Printer args
@@ -48,9 +49,36 @@ static void handle_sigterm(int signum)
     printf("   <<< Signal!\n");
 }
 
-/// Printer thread
-void *thread_Printer(void *args)
+/// Printer thread: prints percentages for each cpu
+///
+/// ARG fields required: Consumer
+void *thread_Printer(void *arg)
 {
+    ArgsThread_type *args = (ArgsThread_type *)(arg);
+    while (1) // Thread loop
+    {
+        /// ==== Consume from buffer ====
+
+        group g_percentages;
+        // Receive group from buffer
+        sem_wait(&args->arg1->sem_filled); // Wait for filled
+        pthread_mutex_lock(&args->arg1->mutex_buffer);
+
+        if (cb_pop_front(&args->arg1->buffer, &g_percentages) != 0)
+            perror("Failed to get element from circular buffer");
+
+        pthread_mutex_unlock(&args->arg1->mutex_buffer);
+        sem_post(&args->arg1->sem_empty); // Tell other thread there is empty available
+
+        group_free(&g_percentages);
+
+        // Test if there was a signal to exit
+        pthread_testcancel();
+
+        /// DEBUG: remove sleep
+        sleep(2);
+    } // End of thread loop
+
     return NULL;
 }
 
@@ -66,25 +94,25 @@ int main()
     sigaction(SIGINT, &sact, NULL);
 
     /// ==== Initialization ====
-    /// -------------------------------
     /// for Read-Analyzer
     pthread_mutex_init(&reader_analyzer.mutex_buffer, NULL);
     sem_init(&reader_analyzer.sem_empty, 0, RA_BUFF_SIZE);
     sem_init(&reader_analyzer.sem_filled, 0, 0);
-    cb_init(&reader_analyzer.buffer, RA_BUFF_SIZE, CPU_READ_SIZE);
-    /// `args_reader->arg1` stays None because this thread doesn't have consumer
+    cb_init(&reader_analyzer.buffer, RA_BUFF_SIZE, sizeof(group)); // Buffer stores array of 'group' structures
+    // `args_reader->arg1` stays undefined because this thread only produces
     args_reader.arg2 = &reader_analyzer;
     args_analyzer.arg1 = &reader_analyzer;
-
     /// for Analyzer-Printer
-    // pthread_mutex_init(&analyzer_printer.mutex_buffer, NULL);
-    // sem_init(&analyzer_printer.sem_empty, 0, AP_BUFF_SIZE);
-    // sem_init(&analyzer_printer.sem_filled, 0, 0);
-    // cb_init(&analyzer_printer.buffer, AP_BUFF_SIZE, ); /// Stopped here!
+    pthread_mutex_init(&analyzer_printer.mutex_buffer, NULL);
+    sem_init(&analyzer_printer.sem_empty, 0, AP_BUFF_SIZE);
+    sem_init(&analyzer_printer.sem_filled, 0, 0);
+    cb_init(&analyzer_printer.buffer, AP_BUFF_SIZE, sizeof(group)); // Buffer stores array of 'group' structures
+    args_analyzer.arg2 = &analyzer_printer;
+    args_printer.arg1 = &analyzer_printer;
+    // `args_printer->arg2` stays undefined because this thread only consumes
     /// -------------------------------
 
     /// ==== Start threads ====
-    /// -------------------------------
     if (pthread_create(&thread[Reader], NULL, &thread_Reader, &args_reader) != 0)
     {
         perror("Failed to create Reader thread");
@@ -101,6 +129,7 @@ int main()
 
     /// TODO: refactor, remove printf()
     printf("Waiting for signal...\n");
+
     /// ==== Manage signaling ====
     while (!sig_quit)
     {
@@ -112,10 +141,10 @@ int main()
     }
     /// -------------------------------
 
-    /// Close threads
-    /// -------------------------------
+    /// TODO: refactor, remove printf()
     printf("Closing threads...\n");
 
+    /// ==== Close threads ====
     if (pthread_cancel(thread[Reader]) != 0)
     {
         perror("Failed to cancel Reader thread");
@@ -124,7 +153,13 @@ int main()
     {
         perror("Failed to cancel Analyzer thread");
     }
+    if (pthread_cancel(thread[Printer]) != 0)
+    {
+        perror("Failed to cancel Printer thread");
+    }
+    /// -------------------------------
 
+    /// ==== Join threads ====
     /// TODO: change to THREAD_NUM
     for (int i = 1; i <= 3; i++)
     {
@@ -133,22 +168,39 @@ int main()
             perror("Failed to join thread");
         }
     }
-    // if (pthread_join(thread[Reader], NULL) != 0)
-    // {
-    //     perror("Failed to join Reader thread");
-    // }
-    // if (pthread_join(thread[Analyzer], NULL) != 0)
-    // {
-    //     perror("Failed to join Analyzer thread");
-    // }
     /// -------------------------------
 
-    /// Destroy
-    /// -------------------------------
+    /// ==== Free resources and Destroy ====
+    /// for Read-Analyzer
+    for (size_t i = 0; i < reader_analyzer.buffer.capacity; i++) // Free allocated groups
+    {
+        group g_group;
+        if (cb_pop_front(&reader_analyzer.buffer, &g_group) != 0)
+        {
+            fprintf(stderr, "Destroy: Failed to get element from circular buffer");
+            continue;
+        }
+        group_free(&g_group);
+    }
     cb_free(&reader_analyzer.buffer);
     sem_destroy(&reader_analyzer.sem_empty);
     sem_destroy(&reader_analyzer.sem_filled);
     pthread_mutex_destroy(&reader_analyzer.mutex_buffer);
+    /// for Analyzer-Printer
+    for (size_t i = 0; i < analyzer_printer.buffer.capacity; i++) // Free allocated groups
+    {
+        group g_group;
+        if (cb_pop_front(&analyzer_printer.buffer, &g_group) != 0)
+        {
+            fprintf(stderr, "Destroy: Failed to get element from circular buffer");
+            continue;
+        }
+        group_free(&g_group);
+    }
+    cb_free(&analyzer_printer.buffer);
+    sem_destroy(&analyzer_printer.sem_empty);
+    sem_destroy(&analyzer_printer.sem_filled);
+    pthread_mutex_destroy(&analyzer_printer.mutex_buffer);
     /// -------------------------------
 
     printf("Exiting\n");

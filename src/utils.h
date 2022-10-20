@@ -23,6 +23,13 @@ typedef struct cpu_fields
     unsigned long long guest_nice;
 } cpu_fields;
 
+/// Structure to store cpu percentage
+typedef struct cpu_usage
+{
+    int cpu_id;
+    double percentage;
+} cpu_usage;
+
 /// Structure to store essential things for between thread communication
 typedef struct consume_produce
 {

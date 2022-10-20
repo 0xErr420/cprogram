@@ -25,7 +25,7 @@ void group_free(group *grp)
 
 void group_info(group *grp)
 {
-    printf("*pgrp: %p  capacity: %d  size: %d  count: %d  uncount: %d\n", grp->pgrp, grp->capacity, grp->size, grp->count, grp->uncount);
+    printf("&pgrp: %p *pgrp: %p capacity: %d size: %d count: %d uncount: %d\n", &grp->pgrp, grp->pgrp, grp->capacity, grp->size, grp->count, grp->uncount);
 }
 
 int group_push(group *grp, const void *item)

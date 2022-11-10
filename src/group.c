@@ -59,3 +59,13 @@ int group_get(group *grp, void *item, int n)
     memcpy(item, grp->pgrp + (grp->size * n), grp->size);
     return 0;
 }
+
+int group_set(group *grp, const void *item, int n)
+{
+    if (n >= grp->count || n < 0)
+    {
+        return -1;
+    }
+    memcpy(grp->pgrp + (grp->size * n), item, grp->size);
+    return 0;
+}

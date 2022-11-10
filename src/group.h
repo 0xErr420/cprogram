@@ -50,4 +50,11 @@ int group_pop(group *grp, void *item);
 /// returns 0 if successful, -1 if failed
 int group_get(group *grp, void *item, int n);
 
+/// Change N element of group to ITEM
+///
+/// N specifies element, ITEM is value to set
+///
+/// return 0 if successful, -1 if failed
+int group_set(group *grp, const void *item, int n);
+
 #endif

@@ -2,6 +2,7 @@
 #include "group.h"
 #include "reader.h"
 #include "analyzer.h"
+#include "printer.h"
 
 #include <features.h>
 #include <stdio.h>
@@ -32,54 +33,20 @@ enum Thread
 #define AP_BUFF_SIZE 10
 
 /// ==== Communication between threads ====
-static ConsumeProduce_type reader_analyzer;  // Reader-Analyzer
-static ConsumeProduce_type analyzer_printer; // Analyzer-Printer
+static consume_produce reader_analyzer;  // Reader-Analyzer
+static consume_produce analyzer_printer; // Analyzer-Printer
 
 /// ==== Arguments for threads ====
-static ArgsThread_type args_reader;   // Reader args
-static ArgsThread_type args_analyzer; // Analyzer args
-static ArgsThread_type args_printer;  // Printer args
+static args_thread args_reader;   // Reader args
+static args_thread args_analyzer; // Analyzer args
+static args_thread args_printer;  // Printer args
 
 /// ==== Signaling ====
-static volatile sig_atomic_t sig_quit = 0;
+static volatile sig_atomic_t sig_to_quit = 0;
 
 static void handle_sigterm(int signum)
 {
-    sig_quit = 1;
-    printf("   <<< Signal!\n");
-}
-
-/// Printer thread: prints percentages for each cpu
-///
-/// ARG fields required: Consumer
-void *thread_Printer(void *arg)
-{
-    ArgsThread_type *args = (ArgsThread_type *)(arg);
-    while (1) // Thread loop
-    {
-        /// ==== Consume from buffer ====
-
-        group g_percentages;
-        // Receive group from buffer
-        sem_wait(&args->arg1->sem_filled); // Wait for filled
-        pthread_mutex_lock(&args->arg1->mutex_buffer);
-
-        if (cb_pop_front(&args->arg1->buffer, &g_percentages) != 0)
-            perror("Failed to get element from circular buffer");
-
-        pthread_mutex_unlock(&args->arg1->mutex_buffer);
-        sem_post(&args->arg1->sem_empty); // Tell other thread there is empty available
-
-        group_free(&g_percentages);
-
-        // Test if there was a signal to exit
-        pthread_testcancel();
-
-        /// DEBUG: remove sleep
-        sleep(2);
-    } // End of thread loop
-
-    return NULL;
+    sig_to_quit = signum;
 }
 
 int main()
@@ -91,7 +58,8 @@ int main()
     struct sigaction sact;
     memset(&sact, 0, sizeof(struct sigaction));
     sact.sa_handler = handle_sigterm;
-    sigaction(SIGINT, &sact, NULL);
+    sigaction(SIGINT, &sact, NULL);  // Handle Interrupt signal (Ctrl+C by user)
+    sigaction(SIGQUIT, &sact, NULL); // Handle Quit signal (Ctrl+\ by user)
 
     /// ==== Initialization ====
     /// for Read-Analyzer
@@ -127,22 +95,16 @@ int main()
     }
     /// -------------------------------
 
-    /// TODO: refactor, remove printf()
-    printf("Waiting for signal...\n");
-
     /// ==== Manage signaling ====
-    while (!sig_quit)
+    while (!sig_to_quit)
     {
         unsigned int t = sleep(3);
         if (t > 0)
         {
-            printf("Interrupted with %d sec to go, finishing...\n", t);
+            printf(" <<< Interrupted with %d sec to go, finishing...\n", t);
         }
     }
     /// -------------------------------
-
-    /// TODO: refactor, remove printf()
-    printf("Closing threads...\n");
 
     /// ==== Close threads ====
     if (pthread_cancel(thread[Reader]) != 0)
@@ -160,7 +122,6 @@ int main()
     /// -------------------------------
 
     /// ==== Join threads ====
-    /// TODO: change to THREAD_NUM
     for (int i = 1; i <= 3; i++)
     {
         if (pthread_join(thread[i], NULL) != 0)
@@ -177,8 +138,8 @@ int main()
         group g_group;
         if (cb_pop_front(&reader_analyzer.buffer, &g_group) != 0)
         {
-            fprintf(stderr, "Destroy: Failed to get element from circular buffer");
-            continue;
+            fprintf(stderr, "Destroy reader-analyzer: Failed to get element from circular buffer\n");
+            break;
         }
         group_free(&g_group);
     }
@@ -192,8 +153,8 @@ int main()
         group g_group;
         if (cb_pop_front(&analyzer_printer.buffer, &g_group) != 0)
         {
-            fprintf(stderr, "Destroy: Failed to get element from circular buffer");
-            continue;
+            fprintf(stderr, "Destroy analyzer-printer: Failed to get element from circular buffer\n");
+            break;
         }
         group_free(&g_group);
     }

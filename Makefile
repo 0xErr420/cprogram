@@ -38,7 +38,7 @@ clean:
 # =========================
 
 # === build executables ===
-CUT: CUT.o reader.o analyzer.o utils.o group.o circular_buffer.o
+CUT: CUT.o reader.o analyzer.o printer.o utils.o group.o circular_buffer.o
 	@echo "Making executable..."
 	$(CC) $(CFLAGS) -o $@ $^
 
@@ -56,6 +56,7 @@ test.o: src/test.c
 
 reader.o: src/reader.c src/reader.h
 analyzer.o: src/analyzer.c src/analyzer.h
+printer.o: src/printer.c src/printer.h
 utils.o: src/utils.c src/utils.h
 group.o: src/group.c src/group.h
 circular_buffer.o: src/circular_buffer.c src/circular_buffer.h

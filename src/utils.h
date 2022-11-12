@@ -1,10 +1,6 @@
 #ifndef UTILS_H
 #define UTILS_H
-#include "circular_buffer.h"
-
-#include <stddef.h>
-#include <pthread.h>
-#include <semaphore.h>
+#include "consume_produce.h"
 
 /// Structure for cpu fields
 /// (all fields of 'cpu' line)
@@ -30,22 +26,13 @@ typedef struct cpu_usage
     double percentage;
 } cpu_usage;
 
-/// Structure to store essential things for between thread communication
-typedef struct consume_produce
-{
-    pthread_mutex_t mutex_buffer;
-    sem_t sem_empty;
-    sem_t sem_filled;
-    circular_buffer buffer;
-} ConsumeProduce_type;
-
 /// Structure to pass multiple arguments to thread
 ///
 /// arg1 - consumer, arg2 - producer
 typedef struct args_thread
 {
-    ConsumeProduce_type *arg1; // Consumer
-    ConsumeProduce_type *arg2; // Producer
-} ArgsThread_type;
+    consume_produce *arg1; // Consumer
+    consume_produce *arg2; // Producer
+} args_thread;
 
 #endif

@@ -1,5 +1,6 @@
 #include "reader.h"
 #include "utils.h"
+#include "consume_produce.h"
 #include "circular_buffer.h"
 #include "group.h"
 
@@ -8,43 +9,49 @@
 #include <unistd.h>
 #include <string.h>
 
+/// Extract cpu field from string
+///
+/// STR is to extract from, CPU used to return
+///
+/// returns 0 if successful, -1 if failed
+static int extract_cpu_fields(const char *str, cpu_fields *cpu);
+
 void *thread_Reader(void *arg)
 {
-    /// TODO: remove any printf(), check for return values, handle errors
-    ArgsThread_type *args = (ArgsThread_type *)(arg);
+    args_thread *args = (args_thread *)(arg);
+
+    // Get available number of cpus
+    long num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+    if (num_cpus == -1)
+    {
+        /// TODO: Signal to watchdog
+        perror("Failed to call sysconf(_SC_NPROCESSORS_ONLN) to get available CPUs");
+        return NULL;
+    }
+
     while (1) // Thread loop
     {
-        // Get available number of cpus
-        long num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
-        if (num_cpus == -1)
-        {
-            /// TODO: Signal to watchdog about this problem (-1 for example, would mean thread failed)
-            perror("Failed to call sysconf(_SC_NPROCESSORS_ONLN) to get available CPUs");
-            break; // Exit thread loop
-        }
+        // Wait for empty and then post it back (produce only after empty producer slot appeared)
+        sem_wait(&args->arg2->sem_empty);
+        sem_post(&args->arg2->sem_empty);
 
-        // Wait for empty and then post it back
-        // (In other words, produce only after empty producer slot appeared)
-        sem_wait(&args->arg2->sem_empty); // Wait for empty
-        sem_post(&args->arg2->sem_empty); // Post empty
-
-        // Initialize 'g_cpus' group for cpu_fields
+        // Initialize group for cpu_fields
         group g_cpus;
-        if (group_init(&g_cpus, num_cpus + 1, sizeof(cpu_fields)) == -1)
+        if (group_init(&g_cpus, num_cpus + 1, sizeof(cpu_fields)) != 0)
         {
-            /// TODO: Signal to watchdog about this problem (-1 for example, would mean thread failed)
-            perror("Failed to initialize group g_cpus");
-            break; // Exit thread loop
+            /// TODO: Signal to watchdog
+            perror("Failed to initialize group");
+            return NULL;
         }
 
-        /// ==== Produce into buffer ====
         // Open file
         FILE *stat_file = fopen("/proc/stat", "r");
         if (stat_file == NULL)
         {
-            /// TODO: Signal to watchdog about this problem (-1 for example, would mean thread failed)
+            /// TODO: Signal to watchdog
             perror("Failed to open /proc/stat file");
-            break; // Exit thread loop
+            group_free(&g_cpus);
+            return NULL;
         }
 
         // Read file and store extracted cpus into group
@@ -56,78 +63,85 @@ void *thread_Reader(void *arg)
             // Read the line
             if (fgets(str, sizeof(str), stat_file) == NULL)
             {
-                // man fgets(): If the End-of-File is encountered and no characters have been read, a null pointer is returned
+                // man fgets(): If the End-of-File or Error occurs, a null pointer is returned. Use feof() or ferror() to determine if it was EOF or an error
                 perror("Failed to read /proc/stat file");
-                break; // Exit read loop
+                fclose(stat_file);
+                group_free(&g_cpus);
+                return NULL;
             }
             // Compare if line starts with "cpu"
             if (strncmp(str, "cpu", (size_t)3) != 0)
-            {
-                // Does not start with "cpu" -> break loop (previous line was last "cpu" line)
-                break; // Exit read loop
-            }
+                break; // Does not start with "cpu" -> break loop (previous line was last "cpu" line)
+
             // Line starts with "cpu" -> continue
 
-            // Extract cpu fields into struct
-            if (strncmp(str, "cpu ", (size_t)4) == 0) // if "cpu_" has space instead of digit
+            // Extract cpu fields
+            if (extract_cpu_fields(str, &cpu) != 0)
             {
-                cpu.cpu_id = -1; // it is total cpu
-                // extract fields of cpu
-                int r = sscanf(str,
-                               "cpu  %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
-                               &cpu.user, &cpu.nice, &cpu.system, &cpu.idle, &cpu.iowait, &cpu.irq, &cpu.softirq, &cpu.steal, &cpu.guest, &cpu.guest_nice);
-                if (r < 4)
-                {
-                    fprintf(stderr, "Failed to extract cpu fields, sscanf() returned %d, minimum 4 expected", r);
-                    break; // Exit read loop
-                }
+                perror("Failed to extract cpu fields");
+                fclose(stat_file);
+                group_free(&g_cpus);
+                return NULL;
             }
-            else // if "cpu_" has digit
-            {
-                // extract id of cpu
-                int r = sscanf(str, "cpu%d ", &cpu.cpu_id);
-                if (r <= 0)
-                {
-                    fprintf(stderr, "Failed to read cpu id field, sscanf() returned %d, 1 expected", r);
-                    break; // Exit read loop
-                }
-                // extract fields of cpu
-                r = sscanf(str,
-                           "cpu%*d  %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
-                           &cpu.user, &cpu.nice, &cpu.system, &cpu.idle, &cpu.iowait, &cpu.irq, &cpu.softirq, &cpu.steal, &cpu.guest, &cpu.guest_nice);
-                if (r < 4)
-                {
-                    fprintf(stderr, "Failed to extract cpu fields, sscanf() returned %d, minimum 4 expected", r);
-                    break; // Exit read loop
-                }
-            }
-
             // Add cpu to group
             if (group_push(&g_cpus, &cpu) == -1)
             {
-                perror("Failed to push element to g_cpus group");
-                break; // Exit read loop
+                perror("Failed to push element to group");
+                fclose(stat_file);
+                group_free(&g_cpus);
+                return NULL;
             }
-
-        } // End of read file loop
+        }
         fclose(stat_file);
 
         // Send to another thread
-        sem_wait(&args->arg2->sem_empty); // Wait for empty
-        pthread_mutex_lock(&args->arg2->mutex_buffer);
-
-        if (cb_push_back(&args->arg2->buffer, &g_cpus) != 0)
-            perror("Failed to add element to circular buffer");
-
-        pthread_mutex_unlock(&args->arg2->mutex_buffer);
-        sem_post(&args->arg2->sem_filled); // Tell other thread there is filled available
+        if (cp_produce(args->arg2, &g_cpus) != 0)
+        {
+            perror("Failed to produce");
+            group_free(&g_cpus);
+            return NULL;
+        }
 
         // Test if there was a signal to exit
         pthread_testcancel();
 
     } // End of thread loop
-
-    /// TODO: In case of thread exit, free all produced elements stored in buffer
-
     return NULL;
+}
+
+static int extract_cpu_fields(const char *str, cpu_fields *cpu)
+{
+    if (strncmp(str, "cpu ", (size_t)4) == 0) // if "cpu_" has space instead of digit
+    {
+        cpu->cpu_id = -1; // it is total cpu
+        // extract fields of cpu
+        int r = sscanf(str,
+                       "cpu  %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
+                       &cpu->user, &cpu->nice, &cpu->system, &cpu->idle, &cpu->iowait, &cpu->irq, &cpu->softirq, &cpu->steal, &cpu->guest, &cpu->guest_nice);
+        if (r < 4)
+        {
+            // fprintf(stderr, "Failed to extract cpu fields, sscanf() returned %d, minimum 4 expected", r);
+            return -1;
+        }
+    }
+    else // if "cpu_" has digit
+    {
+        // extract id of cpu
+        int r = sscanf(str, "cpu%d ", &cpu->cpu_id);
+        if (r <= 0)
+        {
+            // fprintf(stderr, "Failed to read cpu id field, sscanf() returned %d, 1 expected", r);
+            return -1;
+        }
+        // extract fields of cpu
+        r = sscanf(str,
+                   "cpu%*d  %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
+                   &cpu->user, &cpu->nice, &cpu->system, &cpu->idle, &cpu->iowait, &cpu->irq, &cpu->softirq, &cpu->steal, &cpu->guest, &cpu->guest_nice);
+        if (r < 4)
+        {
+            // fprintf(stderr, "Failed to extract cpu fields, sscanf() returned %d, minimum 4 expected", r);
+            return -1;
+        }
+    }
+    return 0;
 }

@@ -13,6 +13,11 @@
 #include <signal.h>
 #include <string.h>
 
+/// Free groups inside consume_produce buffer
+///
+/// CP is to free from
+static void free_groups(consume_produce *cp);
+
 // Using enum for better code readability in the future
 enum Thread
 {
@@ -114,6 +119,9 @@ int main()
     }
 
     /// ==== Destroy ====
+    free_groups(&reader_analyzer);
+    free_groups(&analyzer_printer);
+
     if (cp_destroy(&reader_analyzer) != 0 || cp_destroy(&analyzer_printer) != 0)
     {
         perror("Failed to destroy");
@@ -123,4 +131,15 @@ int main()
     printf("Exiting\n");
 
     return 0;
+}
+
+static void free_groups(consume_produce *cp)
+{
+    for (size_t i = 0; i < cp->buffer.capacity; i++) // Free allocated groups
+    {
+        group grp;
+        if (cb_pop_front(&cp->buffer, &grp) != 0)
+            break;
+        group_free(&grp);
+    }
 }

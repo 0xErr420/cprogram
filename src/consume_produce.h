@@ -31,4 +31,18 @@ int cp_init(consume_produce *cp, size_t buf_size, size_t item_size);
 /// returns 0 if successful, -1 if failed
 int cp_destroy(consume_produce *cp);
 
+/// Produce to consume_produce
+///
+/// CP is to produce to, ITEM is element to produce
+///
+/// returns 0 if successful, -1 if failed
+int cp_produce(consume_produce *cp, const void *item);
+
+/// Consume from consume_produce
+///
+/// CP is to consume from, ITEM used to return
+///
+/// returns 0 if successful, -1 if failed
+int cp_consume(consume_produce *cp, void *item);
+
 #endif

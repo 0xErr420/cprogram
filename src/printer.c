@@ -1,5 +1,6 @@
 #include "printer.h"
 #include "utils.h"
+#include "consume_produce.h"
 #include "group.h"
 #include "circular_buffer.h"
 
@@ -25,7 +26,7 @@ static int print_percentages(group *avg_percentages);
 
 void *thread_Printer(void *arg)
 {
-    ArgsThread_type *args = (ArgsThread_type *)(arg);
+    args_thread *args = (args_thread *)(arg);
     while (1) // Thread loop
     {
         // Group used to store summed percentages
@@ -33,70 +34,62 @@ void *thread_Printer(void *arg)
         int count_divide = 1;
 
         // Initialize group with first element in buffer
-        sem_wait(&args->arg1->sem_filled); // Wait for filled
-        pthread_mutex_lock(&args->arg1->mutex_buffer);
-
-        if (cb_pop_front(&args->arg1->buffer, &g_sum_percentages) != 0)
-            perror("Failed to get element from circular buffer");
-
-        pthread_mutex_unlock(&args->arg1->mutex_buffer);
-        sem_post(&args->arg1->sem_empty); // Tell other thread there is empty available
+        if (cp_consume(args->arg1, &g_sum_percentages) != 0)
+        {
+            perror("Failed to consume");
+            return NULL;
+        }
 
         // Get count of how many items are available in buffer
-        int filled_count;
-        if (sem_getvalue(&args->arg1->sem_filled, &filled_count) != 0)
+        int count_filled;
+        if (sem_getvalue(&args->arg1->sem_filled, &count_filled) != 0)
         {
-            /// TODO: Signal to watchdog about this problem (-1 for example, would mean thread failed)
             perror("Failed to get value of semaphore sem_filled");
-            /// TODO: Properly exit on error
-            break; // Exit thread loop
+            group_free(&g_sum_percentages);
+            return NULL;
         }
 
         // Loop for each available group in buffer and sum percentages for each cpu
-        for (int i = 0; i < filled_count; i++)
+        for (int i = 0; i < count_filled; i++)
         {
             // Current group with percentages
             group g_cur_percentages;
-
             // Consume group from buffer
-            sem_wait(&args->arg1->sem_filled); // Wait for filled
-            pthread_mutex_lock(&args->arg1->mutex_buffer);
-
-            if (cb_pop_front(&args->arg1->buffer, &g_cur_percentages) != 0)
-                perror("Failed to get element from circular buffer");
-
-            pthread_mutex_unlock(&args->arg1->mutex_buffer);
-            sem_post(&args->arg1->sem_empty); // Tell other thread there is empty available
-
+            if (cp_consume(args->arg1, &g_cur_percentages) != 0)
+            {
+                perror("Failed to consume");
+                group_free(&g_sum_percentages);
+                return NULL;
+            }
             // Add corresponding percentages to sum_percentages
             if (sum_cpu_percentages(&g_sum_percentages, &g_cur_percentages) != 0)
             {
                 perror("Failed to sum cpu percentages");
-                /// TODO: Properly exit on error
-                break; // Exit for loop
+                group_free(&g_cur_percentages);
+                group_free(&g_sum_percentages);
+                return NULL;
             }
-
             // Increment counter
             count_divide++;
 
             group_free(&g_cur_percentages);
-        } // End of for loop
+        }
 
         // Calculate average percentages
         if (avg_cpu_percentages(&g_sum_percentages, count_divide) != 0)
         {
             perror("Failed to average cpu percentages");
-            /// TODO: Properly exit on error
-            break;
+            group_free(&g_sum_percentages);
+            return NULL;
         }
 
-        printf("\n============================ CPU usage ============================\n%7s: ", "Usage");
         // Print percentages
+        printf("\n============================ CPU usage ============================\n%7s: ", "Usage");
         if (print_percentages(&g_sum_percentages) != 0)
         {
             perror("Failed to print percentages");
-            /// TODO: Properly exit on error
-            break;
+            group_free(&g_sum_percentages);
+            return NULL;
         }
         printf("\n");
 

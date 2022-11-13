@@ -106,7 +106,7 @@ void *thread_Printer(void *arg)
 
 static int sum_cpu_percentages(group *sum_percentages, group *cur_percentages)
 {
-    for (int i = 0; i < sum_percentages->count; i++)
+    for (size_t i = 0; i < sum_percentages->count; i++)
     {
         cpu_usage sum_perc;
         cpu_usage cur_perc;
@@ -128,7 +128,7 @@ static int sum_cpu_percentages(group *sum_percentages, group *cur_percentages)
 
 static int avg_cpu_percentages(group *sum_percentages, int div)
 {
-    for (int i = 0; i < sum_percentages->count; i++)
+    for (size_t i = 0; i < sum_percentages->count; i++)
     {
         cpu_usage sum;
 
@@ -149,7 +149,7 @@ static int avg_cpu_percentages(group *sum_percentages, int div)
 
 static int print_percentages(group *avg_percentages)
 {
-    for (int i = 0; i < avg_percentages->count; i++)
+    for (size_t i = 0; i < avg_percentages->count; i++)
     {
         cpu_usage perc;
 

@@ -5,11 +5,11 @@
 /// Group structure
 typedef struct group
 {
-    void *pgrp;   // pointer to allocated memory (capacity * size)
-    int capacity; // amount of elements
-    int size;     // size of each element
-    int count;    // count how many elements already added
-    int uncount;  // used for pop operation
+    void *pgrp;      // pointer to allocated memory (capacity * size)
+    size_t capacity; // amount of elements
+    size_t size;     // size of each element
+    size_t count;    // count how many elements already added
+    size_t uncount;  // used for pop operation
 } group;
 
 /// Initialize group
@@ -25,7 +25,7 @@ void group_free(group *grp);
 
 /// Show info about group fields
 /// (for debug purposes)
-void group_info(group *grp);
+// void group_info(group *grp);
 
 /// Push element to group
 ///
@@ -48,13 +48,13 @@ int group_pop(group *grp, void *item);
 /// N specifies element, ITEM used to return value
 ///
 /// returns 0 if successful, -1 if failed
-int group_get(group *grp, void *item, int n);
+int group_get(group *grp, void *item, size_t n);
 
 /// Change N element of group to ITEM
 ///
 /// N specifies element, ITEM is value to set
 ///
 /// return 0 if successful, -1 if failed
-int group_set(group *grp, const void *item, int n);
+int group_set(group *grp, const void *item, size_t n);
 
 #endif

@@ -23,10 +23,10 @@ void group_free(group *grp)
     free(grp->pgrp);
 }
 
-void group_info(group *grp)
-{
-    printf("&pgrp: %p *pgrp: %p capacity: %d size: %d count: %d uncount: %d\n", &grp->pgrp, grp->pgrp, grp->capacity, grp->size, grp->count, grp->uncount);
-}
+// void group_info(group *grp)
+// {
+//     printf("&pgrp: %p *pgrp: %p capacity: %ld size: %ld count: %ld uncount: %ld\n", &grp->pgrp, grp->pgrp, grp->capacity, grp->size, grp->count, grp->uncount);
+// }
 
 int group_push(group *grp, const void *item)
 {
@@ -50,9 +50,9 @@ int group_pop(group *grp, void *item)
     return 0;
 }
 
-int group_get(group *grp, void *item, int n)
+int group_get(group *grp, void *item, size_t n)
 {
-    if (n >= grp->count || n < 0)
+    if (n >= grp->count)
     {
         return -1;
     }
@@ -60,9 +60,9 @@ int group_get(group *grp, void *item, int n)
     return 0;
 }
 
-int group_set(group *grp, const void *item, int n)
+int group_set(group *grp, const void *item, size_t n)
 {
-    if (n >= grp->count || n < 0)
+    if (n >= grp->count)
     {
         return -1;
     }

@@ -43,7 +43,7 @@ void *thread_Analyzer(void *arg)
         }
 
         // Loop for each cpu in group, calculate percentage and add to percentages group
-        for (int i = 0; i < g_cpus.count; i++)
+        for (size_t i = 0; i < g_cpus.count; i++)
         {
             cpu_fields cpu;           // Strcucture used to pop cpu from group
             cpu_usage cpu_percentage; // Structure used to store calculated percentages
@@ -89,8 +89,8 @@ void *thread_Analyzer(void *arg)
 static void calc_percentage(cpu_fields *cpu, cpu_usage *perc)
 {
     // Simplified version of percentage calculation
-    unsigned long long idle = cpu->idle + cpu->iowait;
-    unsigned long long non_idle = cpu->user + cpu->nice + cpu->system + cpu->irq + cpu->softirq + cpu->steal;
+    double idle = cpu->idle + cpu->iowait;
+    double non_idle = cpu->user + cpu->nice + cpu->system + cpu->irq + cpu->softirq + cpu->steal;
 
     double total = idle + non_idle;
     double usage_percent = (non_idle * 100) / total;

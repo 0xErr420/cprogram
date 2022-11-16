@@ -1,5 +1,6 @@
 # By default use gcc, if CC arg was not provided (use `make CC=<compiler>`)
 CC = gcc
+CFLAGS = -pthread
 
 # CFLAGS arg can be used (use `make CFLAGS=<flag>`)
 # gcc by default uses gnu17 dialect
